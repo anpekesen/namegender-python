@@ -3,14 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "genderscope"
-version = "0.1.0"
-description = "Official Python client for the GenderScope API"
+name = "namegender-client"
+version = "0.2.0"
+description = "Official Python client for the NameGender API"
 requires-python = ">=3.9"
 readme = "README.md"
 license = "MIT"
-authors = [{name = "GenderScope", email = "support@genderscope.io"}]
-keywords = ["gender", "name", "api", "genderscope"]
+authors = [{name = "NameGender", email = "support@namegender.com"}]
+keywords = ["gender", "name", "api", "namegender"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -27,10 +27,10 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://genderscope.io"
-Documentation = "https://genderscope.io/docs"
-Repository = "https://github.com/anpekesen/genderscope-python"
-Issues = "https://github.com/anpekesen/genderscope-python/issues"
+Homepage = "https://namegender.com"
+Documentation = "https://namegender.com/docs"
+Repository = "https://github.com/anpekesen/namegender-python"
+Issues = "https://github.com/anpekesen/namegender-python/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

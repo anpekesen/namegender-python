@@ -3,15 +3,15 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 
-class GenderScopeError(RuntimeError):
+class NameGenderError(RuntimeError):
     def __init__(self, message, status=0, body=None):
         super().__init__(message)
         self.status = status
         self.body = body
 
 
-class GenderScope:
-    def __init__(self, api_key, base_url="https://genderscope.io/api/v1", timeout=30):
+class NameGender:
+    def __init__(self, api_key, base_url="https://namegender.com/api/v1", timeout=30):
         if not api_key:
             raise ValueError("api_key is required")
         self.api_key = api_key
@@ -54,4 +54,4 @@ class GenderScope:
                 payload = json.loads(error.read())
             except Exception:
                 payload = None
-            raise GenderScopeError((payload or {}).get("message", str(error)), error.code, payload) from error
+            raise NameGenderError((payload or {}).get("message", str(error)), error.code, payload) from error
