@@ -13,6 +13,13 @@ on:
   push:
     tags: ['v*']
 
+# v0.3.1 etiketi bu iş akışını aynı anda iki kez başlattı: biri yükledi, öteki
+# "File already exists" ile düştü. Aynı etiket için tek çalışma, ve zaten
+# yüklü dosya hata sayılmıyor; yeniden çalıştırma da böylece güvenli.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -43,3 +50,5 @@ jobs:
       - run: python -m build
 
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
