@@ -34,6 +34,10 @@ class NameGender:
         return self._post("/gender/username", self._payload(username=username, country=country, **options))
 
     def bulk(self, names, country=None, type="name", **options):
+        # A single string is one name. list("Ayşe") would split it into
+        # ["A", "y", "ş", "e"]: four lookups, four credits, no useful answer.
+        if isinstance(names, str):
+            names = [names]
         return self._post("/gender/bulk", self._payload(names=list(names), country=country, type=type, **options))
 
     def countries(self, name, limit=None):

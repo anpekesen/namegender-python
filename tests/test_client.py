@@ -17,6 +17,20 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(request.headers["Authorization"], "Bearer secret")
 
     @patch("namegender.client.urlopen")
+    def test_bulk_treats_a_string_as_one_name(self, urlopen):
+        # list("Ayşe") splits a string into characters; that sent four names
+        # and cost four credits.
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = b'{"results":[],"summary":{}}'
+        client = NameGender("secret")
+
+        client.bulk("Ayşe")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data)["names"], ["Ayşe"])
+
+        client.bulk(("Ayşe", "Mehmet"))
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data)["names"], ["Ayşe", "Mehmet"])
+
+    @patch("namegender.client.urlopen")
     def test_countries(self, urlopen):
         response = urlopen.return_value.__enter__.return_value
         response.read.return_value = b'{"name":"Mehmet","registrations":[{"country":"FR","share":58.97}],"attested_in":["FR","TR"]}'
