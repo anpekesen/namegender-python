@@ -30,6 +30,14 @@ class NameGender:
     def bulk(self, names, country=None, type="name", **options):
         return self._post("/gender/bulk", self._payload(names=list(names), country=country, type=type, **options))
 
+    def countries(self, name, limit=None):
+        """Country distribution of a name. Not a country-of-origin or ethnicity inference.
+
+        ``registrations`` is counted volume, comparable only among countries that publish
+        counted birth statistics; ``attested_in`` is presence with no weight attached.
+        """
+        return self._post("/gender/countries", self._payload(name=name, limit=limit))
+
     def account(self):
         return self._request("GET", "/me")
 
