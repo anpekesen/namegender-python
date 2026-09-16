@@ -18,6 +18,12 @@ class NameGender:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
+    # ``options`` are sent as-is: ``ai_fallback=True`` falls back to a language
+    # model for names not in the database (needs AI consent on the account),
+    # ``best_guess=True`` returns the most likely gender even below the
+    # probability threshold. A successful response is any 2xx status; anything
+    # else raises NameGenderError.
+
     def name(self, name, country=None, **options):
         return self._post("/gender", self._payload(name=name, country=country, **options))
 
