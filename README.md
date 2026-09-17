@@ -20,7 +20,7 @@ print(result["gender"], result["probability"], result["sample_size"], result["co
 result = client.name("Andrea", country="IT", best_guess=True)
 ```
 
-A result carries `query`, `name`, `gender`, `country`, `probability`,
+A result carries `query`, `name`, `first_name`, `middle_name`, `last_name`, `name_type`, `gender`, `country`, `probability`,
 `sample_size`, `took_ms`, `source`, `confidence` and `matched_as`, alongside
 `credits_charged`, `credits_remaining`, `data_version` and `request_id`.
 Success is the HTTP status: any non-2xx response raises `NameGenderError`
