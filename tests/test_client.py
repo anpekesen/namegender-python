@@ -60,3 +60,73 @@ class ClientTest(unittest.TestCase):
             NameGender("secret").account()
         self.assertEqual(caught.exception.status, 402)
         self.assertEqual(caught.exception.body["error"], "no_credits")
+
+
+class BatchesTest(unittest.TestCase):
+    @patch("namegender.client.urlopen")
+    def test_create_uploads_multipart_with_idempotency_key(self, urlopen):
+        urlopen.return_value.__enter__.return_value.read.return_value = b'{"id":"B-1","status":"queued"}'
+        job = NameGender("secret").batches.create(b"ad\nAy\xc5\x9fe\n", filename="customers.csv",
+                                                   name_column="ad", best_guess=True, country=None)
+        self.assertEqual(job["id"], "B-1")
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://namegender.com/api/v1/batches")
+        self.assertTrue(request.headers["Content-type"].startswith("multipart/form-data; boundary="))
+        self.assertTrue(request.headers["Idempotency-key"])
+        body = request.data.decode()
+        self.assertIn('name="name_column"\r\n\r\nad\r\n', body)
+        self.assertIn('name="best_guess"\r\n\r\ntrue\r\n', body)
+        self.assertIn('name="start"\r\n\r\ntrue\r\n', body)
+        self.assertNotIn('name="country"', body)
+        self.assertIn('filename="customers.csv"', body)
+        self.assertIn("ad\nAyşe\n", body)
+
+    @patch("namegender.client.time.sleep")
+    @patch("namegender.client.urlopen")
+    def test_create_retries_with_the_same_key_but_not_a_refusal(self, urlopen, sleep):
+        ok = urlopen.return_value.__enter__.return_value
+        ok.read.return_value = b'{"id":"B-1"}'
+        urlopen.side_effect = [HTTPError("u", 503, "x", {}, io.BytesIO(b"{}")), urlopen.return_value]
+        NameGender("secret").batches.create(b"x", filename="a.csv", name_column="ad")
+        keys = [call.args[0].headers["Idempotency-key"] for call in urlopen.call_args_list]
+        self.assertEqual(len(keys), 2)
+        self.assertEqual(keys[0], keys[1])
+
+        urlopen.reset_mock()
+        urlopen.side_effect = HTTPError("u", 402, "x", {}, io.BytesIO(b'{"error":"no_credits"}'))
+        with self.assertRaises(NameGenderError):
+            NameGender("secret").batches.create(b"x", filename="a.csv", name_column="ad")
+        self.assertEqual(urlopen.call_count, 1)
+
+    def test_bytes_need_a_filename(self):
+        with self.assertRaises(ValueError):
+            NameGender("secret").batches.create(b"x")
+
+    @patch("namegender.client.time.sleep")
+    @patch("namegender.client.urlopen")
+    def test_wait_polls_until_finished(self, urlopen, sleep):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.side_effect = [
+            b'{"id":"B-1","status":"queued","poll_after_seconds":2}',
+            b'{"id":"B-1","status":"completed","poll_after_seconds":null}',
+        ]
+        seen = []
+        job = NameGender("secret").batches.wait("B-1", on_progress=lambda j: seen.append(j["status"]))
+        self.assertEqual(job["status"], "completed")
+        self.assertEqual(seen, ["queued", "completed"])
+        sleep.assert_called_once_with(2)
+
+    @patch("namegender.client.urlopen")
+    def test_cancel_list_and_download(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.side_effect = [b"", b'{"data":[],"total":0}', b"ad,gender\n"]
+        client = NameGender("secret")
+        self.assertIsNone(client.batches.cancel("B-1"))
+        client.batches.list(limit=5)
+        self.assertEqual(client.batches.download("B-1"), b"ad,gender\n")
+        calls = [(c.args[0].get_method(), c.args[0].full_url) for c in urlopen.call_args_list]
+        self.assertEqual(calls, [
+            ("DELETE", "https://namegender.com/api/v1/batches/B-1"),
+            ("GET", "https://namegender.com/api/v1/batches?limit=5"),
+            ("GET", "https://namegender.com/api/v1/batches/B-1/result"),
+        ])

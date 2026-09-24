@@ -48,3 +48,43 @@ and India, appear. Show `basis["note"]` next to any percentage you display.
 
 `limit` (1–100, default 25) caps how many counted countries come back in
 `registrations`. One credit per request.
+
+## File jobs
+
+Upload a CSV or XLSX file (up to 100 MB and 1,000,000 rows) and get it back
+with gender columns added. One credit per row, charged only if the job
+completes.
+
+```python
+job = client.batches.create(
+    "customers.csv",             # a path, bytes (with filename=) or a binary file object
+    name_column="first_name",    # required to start
+    country_column="country",    # optional: a country code per row
+)
+
+done = client.batches.wait(job["id"], on_progress=lambda j: print(j["progress"]))
+if done["status"] == "failed":
+    raise RuntimeError(done["error"]["code"])
+
+client.batches.download(done["id"], "customers-gender.csv")
+```
+
+`name_column` is required to start: a guessed column that turns out to be
+wrong would spend credits on the wrong data. To see the columns and the cost
+first, upload with `start=False`, read `job["inspection"]`, then call
+`client.batches.start(job["id"], name_column=...)`.
+
+`create` sends an `Idempotency-Key` and retries network errors and 502/503/504
+with the same key, so a retry never opens a second job. Pass your own
+`idempotency_key` to keep that guarantee across your own retries.
+
+`wait` returns a failed job rather than raising; branch on
+`job["error"]["code"]`. `cancel` returns the credit of a job that has not
+started, and deletes a finished one. `list(limit=, page=)` includes jobs
+started from the dashboard. Up to three jobs can be queued or running at once;
+a fourth is refused with `429 too_many_batches`.
+
+The result appends `gender`, `probability`, `sample_size`, `country`, `source`,
+`matched_as`, `first_name`, `middle_name`, `last_name` and `name_type` to every
+row. A CSV result starts with a UTF-8 byte order mark; read it with
+`encoding="utf-8-sig"`.
