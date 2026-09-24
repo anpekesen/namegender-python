@@ -130,3 +130,33 @@ class BatchesTest(unittest.TestCase):
             ("GET", "https://namegender.com/api/v1/batches?limit=5"),
             ("GET", "https://namegender.com/api/v1/batches/B-1/result"),
         ])
+
+
+class WebhookTest(unittest.TestCase):
+    # Same vector as the server's WebhookDeliveryTest, computed independently.
+    SECRET = "whsec_test_vector"
+    BODY = b'{"id":"evt_1","type":"webhook.test"}'
+    HEADER = "t=1700000000,v1=857fcddfea47617c448b7a8e6537bbd59c9922a37c5273b2709812fbadb29e50"
+    NOW = 1700000000
+
+    def test_verifies_the_shared_vector(self):
+        from namegender import webhooks
+        self.assertEqual(webhooks.verify(self.BODY, self.HEADER, self.SECRET, now=self.NOW + 60)["id"], "evt_1")
+        self.assertEqual(webhooks.verify(self.BODY.decode(), self.HEADER, self.SECRET, now=self.NOW)["type"], "webhook.test")
+        rotated = "t=1700000000,v1=" + "0" * 64 + ",v1=857fcddfea47617c448b7a8e6537bbd59c9922a37c5273b2709812fbadb29e50"
+        webhooks.verify(self.BODY, rotated, self.SECRET, now=self.NOW)
+
+    def test_rejects_tampering_wrong_secret_old_timestamp_and_bad_header(self):
+        from namegender import WebhookVerificationError, webhooks
+        cases = [
+            (self.BODY.replace(b"evt_1", b"evt_2"), self.HEADER, self.SECRET, self.NOW),
+            (self.BODY, self.HEADER, "whsec_other", self.NOW),
+            (self.BODY, self.HEADER, self.SECRET, self.NOW + 301),
+            (self.BODY, None, self.SECRET, self.NOW),
+            (self.BODY, "t=abc,v1=", self.SECRET, self.NOW),
+        ]
+        for payload, header, secret, now in cases:
+            with self.assertRaises(WebhookVerificationError):
+                webhooks.verify(payload, header, secret, now=now)
+        with self.assertRaises(TypeError):
+            webhooks.verify({"id": "evt_1"}, self.HEADER, self.SECRET, now=self.NOW)

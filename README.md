@@ -88,3 +88,38 @@ The result appends `gender`, `probability`, `sample_size`, `country`, `source`,
 `matched_as`, `first_name`, `middle_name`, `last_name` and `name_type` to every
 row. A CSV result starts with a UTF-8 byte order mark; read it with
 `encoding="utf-8-sig"`.
+
+## Webhooks
+
+Add an endpoint under Webhooks in the dashboard, and NameGender sends a signed
+`POST` to it when a file job completes or fails. `webhooks.verify` checks the
+signature and the timestamp, and returns the event.
+
+```python
+import os
+from flask import Flask, request
+from namegender import webhooks, WebhookVerificationError
+
+app = Flask(__name__)
+
+@app.post("/namegender")
+def namegender_webhook():
+    try:
+        event = webhooks.verify(
+            request.get_data(),   # the raw bytes, not request.json
+            request.headers.get("NameGender-Signature"),
+            os.environ["NAMEGENDER_WEBHOOK_SECRET"],
+        )
+    except WebhookVerificationError:
+        return "", 400
+
+    if event["type"] == "batch.completed":
+        job = event["data"]["object"]   # the job, as batches.get() returns it
+        ...
+    return "", 204
+```
+
+Answer quickly and do slow work afterwards. Anything other than a 2xx within 10
+seconds is retried, up to 8 attempts over about 45 hours. Use `event["id"]`
+(also the `NameGender-Event-Id` header) to ignore a delivery you have already
+handled: a retry carries the same id, and order is not guaranteed.
