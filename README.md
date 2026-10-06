@@ -13,14 +13,28 @@ print(result["gender"], result["probability"], result["sample_size"], result["co
 
 ## Options and response
 
-`name`, `email`, `username` and `bulk` accept `country`, `ai_fallback` and
-`best_guess` as keyword arguments:
+`name`, `email`, `username` and `bulk` accept `country`, `locale`, `ip`,
+`ai_fallback` and `best_guess` as keyword arguments:
 
 ```python
 result = client.name("Andrea", country="IT", best_guess=True)
 ```
 
-A result carries `query`, `name`, `first_name`, `middle_name`, `last_name`, `name_type`, `gender`, `country`, `probability`,
+When you don't know the country, pass what you do know. `locale` is a
+language tag such as `"it-IT"` or `"pt_BR"`; its region is used as the
+country (`"en"` alone sets none). `ip` is your end user's IP address; its
+country is used when there is no `country` and no regional `locale`. The API
+does not store it. `country` wins over `locale`, and `locale` over `ip`;
+`country_source` on the response says which one was used (`"country"`,
+`"locale"`, `"ip"` or `None`); for `bulk` it is on the top level of the
+response, next to `summary`, not on each item in `results`.
+
+```python
+result = client.name("Andrea", locale="it-IT", ip="203.0.113.7")
+print(result["country"], result["country_source"])  # IT locale
+```
+
+A result carries `query`, `name`, `first_name`, `middle_name`, `last_name`, `name_type`, `gender`, `country`, `country_source`, `probability`,
 `sample_size`, `took_ms`, `source`, `confidence` and `matched_as`, alongside
 `credits_charged`, `credits_remaining`, `data_version` and `request_id`.
 Success is the HTTP status: any non-2xx response raises `NameGenderError`

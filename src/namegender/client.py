@@ -34,22 +34,31 @@ class NameGender:
     # ``best_guess=True`` returns the most likely gender even below the
     # probability threshold. A successful response is any 2xx status; anything
     # else raises NameGenderError.
+    #
+    # Where the country comes from, in order: ``country`` (ISO code), then the
+    # region of ``locale`` (a language tag such as ``"it-IT"`` or ``"pt_BR"``;
+    # ``"en"`` alone sets no country), then the country of ``ip`` (the end
+    # user's IP address, not stored by the API). Each is sent only when given.
+    # The response's ``country_source`` says which one was used: ``"country"``,
+    # ``"locale"``, ``"ip"`` or ``None`` (for ``bulk``, on the top level, not per item).
 
-    def name(self, name, country=None, **options):
-        return self._post("/gender", self._payload(name=name, country=country, **options))
+    def name(self, name, country=None, *, locale=None, ip=None, **options):
+        return self._post("/gender", self._payload(name=name, country=country, locale=locale, ip=ip, **options))
 
-    def email(self, email, country=None, **options):
-        return self._post("/gender/email", self._payload(email=email, country=country, **options))
+    def email(self, email, country=None, *, locale=None, ip=None, **options):
+        return self._post("/gender/email", self._payload(email=email, country=country, locale=locale, ip=ip, **options))
 
-    def username(self, username, country=None, **options):
-        return self._post("/gender/username", self._payload(username=username, country=country, **options))
+    def username(self, username, country=None, *, locale=None, ip=None, **options):
+        return self._post("/gender/username", self._payload(
+            username=username, country=country, locale=locale, ip=ip, **options))
 
-    def bulk(self, names, country=None, type="name", **options):
+    def bulk(self, names, country=None, type="name", *, locale=None, ip=None, **options):
         # A single string is one name. list("Ayşe") would split it into
         # ["A", "y", "ş", "e"]: four lookups, four credits, no useful answer.
         if isinstance(names, str):
             names = [names]
-        return self._post("/gender/bulk", self._payload(names=list(names), country=country, type=type, **options))
+        return self._post("/gender/bulk", self._payload(
+            names=list(names), country=country, type=type, locale=locale, ip=ip, **options))
 
     def countries(self, name, limit=None):
         """Country distribution of a name. Not a country-of-origin or ethnicity inference.

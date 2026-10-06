@@ -53,6 +53,40 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(json.loads(request.data), {"name": "Andrea", "country": "IT", "ai_fallback": True, "best_guess": True})
 
     @patch("namegender.client.urlopen")
+    def test_locale_and_ip_are_sent_only_when_given(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = b'{"gender":"male","country":"IT","country_source":"locale"}'
+        client = NameGender("secret")
+
+        result = client.name("Andrea", locale="it-IT", ip="203.0.113.7")
+        self.assertEqual(result["country_source"], "locale")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data),
+                         {"name": "Andrea", "locale": "it-IT", "ip": "203.0.113.7"})
+
+        client.email("andrea@example.com", ip="203.0.113.7")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data), {"email": "andrea@example.com", "ip": "203.0.113.7"})
+
+        client.username("andrea92", locale="pt_BR")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data), {"username": "andrea92", "locale": "pt_BR"})
+
+        client.name("Andrea", country="IT")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data), {"name": "Andrea", "country": "IT"})
+
+    @patch("namegender.client.urlopen")
+    def test_bulk_sends_locale_and_ip(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = b'{"results":[{"name":"Andrea"}],"summary":{},"took_ms":4,"country_source":"ip"}'
+        client = NameGender("secret")
+
+        result = client.bulk(["Andrea"], locale="en", ip="203.0.113.7")
+        self.assertEqual(result["country_source"], "ip")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data),
+                         {"names": ["Andrea"], "type": "name", "locale": "en", "ip": "203.0.113.7"})
+
+        client.bulk(["Andrea"], "IT", "name")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data), {"names": ["Andrea"], "country": "IT", "type": "name"})
+
+    @patch("namegender.client.urlopen")
     def test_error_status_raises(self, urlopen):
         body = b'{"error":"no_credits","message":"Out of credits.","request_id":"req_1","docs":"https://namegender.com/docs"}'
         urlopen.side_effect = HTTPError("https://namegender.com/api/v1/me", 402, "Payment Required", {}, io.BytesIO(body))
