@@ -73,6 +73,35 @@ When the gender is not certain you get the neutral form: `form` is
 not gendered (`"gender_unknown"`, `"below_min_probability"`, ...).
 `best_guess` does not apply to salutations.
 
+## Name check
+
+Says whether a name typed into a form looks like a real person's name, with
+the reasons.
+
+```python
+result = client.name_check("asdf qwerty")
+print(result["assessment"])  # implausible
+print(result["signals"][0]["code"])  # keyboard_pattern
+
+result = client.name_check("Jennifer Null")
+print(result["assessment"])  # plausible
+
+# First and last name stored separately:
+result = client.name_check(first_name="Jennifer", last_name="Null", country="US")
+
+result = client.name_check_bulk(["asdf qwerty", "Jennifer Null"])
+print(result["summary"])  # {"total": 2, "plausible": 1, "suspicious": 0, "implausible": 1}
+```
+
+Keyword arguments: `country`, `locale` and `ip`. One credit per name;
+`name_check_bulk` takes up to 100 names and returns `results` in input order.
+`assessment` is `"plausible"`, `"suspicious"` or `"implausible"`, `score` is
+0–100, and each signal has `code`, `severity`, `part` and `value` (the last
+two possibly `None`).
+
+It never calls a name fake: use it to flag records for a second look, not to
+reject people automatically. Surnames are judged by their shape only.
+
 ## Country distribution
 
 Returns the countries a name is recorded in. This is not a country-of-origin or

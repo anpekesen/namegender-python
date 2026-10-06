@@ -25,6 +25,32 @@ SALUTATION_NEUTRAL = {
 }
 
 
+NAME_CHECK_IMPLAUSIBLE = {
+    "credits_charged": 1, "credits_remaining": 99, "data_version": "2026.10", "request_id": "req_1",
+    "country_source": None, "query": "asdf qwerty", "assessment": "implausible", "score": 0,
+    "signals": [
+        {"code": "keyboard_pattern", "severity": "high", "part": "first_name", "value": "asdf"},
+        {"code": "keyboard_pattern", "severity": "high", "part": "last_name", "value": "qwerty"},
+        {"code": "first_name_not_found", "severity": "medium", "part": "first_name", "value": None},
+    ],
+    "first_name": "Asdf", "last_name": "Qwerty", "name_type": "personal",
+    "evidence": {"first_name_status": "not_found", "first_name_counted_records": 0},
+}
+
+NAME_CHECK_PLAUSIBLE = {
+    **NAME_CHECK_IMPLAUSIBLE, "country_source": "country", "query": "Jennifer Null", "assessment": "plausible", "score": 96,
+    "signals": [{"code": "first_name_attested", "severity": "positive", "part": "first_name", "value": "Jennifer"}],
+    "first_name": "Jennifer", "last_name": "Null",
+    "evidence": {"first_name_status": "counted", "first_name_counted_records": 1468723},
+}
+
+NAME_CHECK_SUSPICIOUS = {
+    **NAME_CHECK_IMPLAUSIBLE, "query": "Madonna", "assessment": "suspicious", "score": 45,
+    "signals": [{"code": "single_name", "severity": "low", "part": None, "value": None}],
+    "first_name": None, "last_name": None,
+    "evidence": {"first_name_status": None, "first_name_counted_records": 0},
+}
+
 class ClientTest(unittest.TestCase):
     @patch("namegender.client.urlopen")
     def test_name(self, urlopen):
@@ -186,6 +212,80 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(str(caught.exception), "Unsupported language.")
         self.assertEqual(caught.exception.body["field"], "language")
         self.assertEqual(caught.exception.body["supported"], ["en", "de", "tr"])
+
+    @patch("namegender.client.urlopen")
+    def test_name_check_sends_only_the_options_that_are_set(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = json.dumps(NAME_CHECK_IMPLAUSIBLE).encode()
+        client = NameGender("secret")
+
+        result = client.name_check("asdf qwerty", locale="de-DE")
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://namegender.com/api/v1/name-check")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(json.loads(request.data), {"name": "asdf qwerty", "locale": "de-DE"})
+        self.assertEqual(result["assessment"], "implausible")
+        self.assertEqual(result["score"], 0)
+        self.assertEqual(result["signals"][0], {"code": "keyboard_pattern", "severity": "high", "part": "first_name", "value": "asdf"})
+        self.assertIsNone(result["signals"][2]["value"])
+        self.assertEqual(result["evidence"], {"first_name_status": "not_found", "first_name_counted_records": 0})
+        self.assertEqual(result["credits_charged"], 1)
+
+        response.read.return_value = json.dumps(NAME_CHECK_PLAUSIBLE).encode()
+        result = client.name_check(first_name="Jennifer", last_name="Null", country="US", locale="en-US", ip="203.0.113.7")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data), {
+            "first_name": "Jennifer", "last_name": "Null", "country": "US", "locale": "en-US", "ip": "203.0.113.7"})
+        self.assertEqual(result["assessment"], "plausible")
+        self.assertEqual(result["signals"][0]["severity"], "positive")
+        self.assertEqual(result["evidence"]["first_name_status"], "counted")
+        self.assertEqual(result["country_source"], "country")
+
+    @patch("namegender.client.urlopen")
+    def test_name_check_null_part_value_and_first_name_status(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = json.dumps(NAME_CHECK_SUSPICIOUS).encode()
+        result = NameGender("secret").name_check("Madonna")
+        self.assertEqual(result["assessment"], "suspicious")
+        self.assertEqual(result["signals"], [{"code": "single_name", "severity": "low", "part": None, "value": None}])
+        self.assertIsNone(result["evidence"]["first_name_status"])
+        self.assertIsNone(result["first_name"])
+
+    @patch("namegender.client.urlopen")
+    def test_name_check_bulk_keeps_order_and_summary(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        results = [{k: v for k, v in r.items() if k not in ENVELOPE}
+                   for r in (NAME_CHECK_IMPLAUSIBLE, NAME_CHECK_PLAUSIBLE, NAME_CHECK_SUSPICIOUS)]
+        response.read.return_value = json.dumps({
+            "credits_charged": 3, "credits_remaining": 96, "data_version": "2026.10", "request_id": "req_2",
+            "took_ms": 4, "country_source": "ip",
+            "summary": {"total": 3, "plausible": 1, "suspicious": 1, "implausible": 1}, "results": results,
+        }).encode()
+        client = NameGender("secret")
+
+        result = client.name_check_bulk(("asdf qwerty", "Jennifer Null", "Madonna"), ip="203.0.113.7")
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://namegender.com/api/v1/name-check/bulk")
+        self.assertEqual(json.loads(request.data), {"names": ["asdf qwerty", "Jennifer Null", "Madonna"], "ip": "203.0.113.7"})
+        self.assertEqual(result["summary"], {"total": 3, "plausible": 1, "suspicious": 1, "implausible": 1})
+        self.assertEqual(result["country_source"], "ip")
+        self.assertEqual([r["query"] for r in result["results"]], ["asdf qwerty", "Jennifer Null", "Madonna"])
+        self.assertEqual([r["assessment"] for r in result["results"]], ["implausible", "plausible", "suspicious"])
+        self.assertIsNone(result["results"][2]["signals"][0]["part"])
+        self.assertNotIn("credits_charged", result["results"][0])
+
+        client.name_check_bulk("asdf qwerty")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data), {"names": ["asdf qwerty"]})
+
+    @patch("namegender.client.urlopen")
+    def test_name_check_without_a_name_raises(self, urlopen):
+        body = json.dumps({"error": "missing_input", "message": "Provide name, or first_name and last_name.",
+                           "request_id": "req_8"}).encode()
+        urlopen.side_effect = HTTPError("https://namegender.com/api/v1/name-check", 400, "Bad Request", {}, io.BytesIO(body))
+        with self.assertRaises(NameGenderError) as caught:
+            NameGender("secret").name_check()
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data), {})
+        self.assertEqual(caught.exception.status, 400)
+        self.assertEqual(caught.exception.body["error"], "missing_input")
 
 
 class BatchesTest(unittest.TestCase):

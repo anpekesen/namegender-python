@@ -90,6 +90,29 @@ class NameGender:
             names=list(names), language=language, country=country, locale=locale, ip=ip, gender=gender,
             min_probability=min_probability, title=title))
 
+    def name_check(self, name=None, *, first_name=None, last_name=None, country=None, locale=None, ip=None):
+        """Whether a name typed into a form looks like a real person's name.
+
+        Pass the full name, or ``first_name`` and ``last_name`` when they are
+        stored separately. ``assessment`` is "plausible", "suspicious" or
+        "implausible", ``score`` is 0-100 and ``signals`` give the reasons
+        (``code``, ``severity``, ``part``, ``value``). It never calls a name
+        fake: use it to flag records for a look, not to reject people
+        automatically. Surnames are judged by their shape only. One credit.
+        """
+        return self._post("/name-check", self._payload(
+            name=name, first_name=first_name, last_name=last_name, country=country, locale=locale, ip=ip))
+
+    def name_check_bulk(self, names, *, country=None, locale=None, ip=None):
+        """Name checks for up to 100 names, returned in input order. One credit per name.
+
+        The options, as for :meth:`name_check`, apply to every name.
+        """
+        if isinstance(names, str):
+            names = [names]
+        return self._post("/name-check/bulk", self._payload(
+            names=list(names), country=country, locale=locale, ip=ip))
+
     def countries(self, name, limit=None):
         """Country distribution of a name. Not a country-of-origin or ethnicity inference.
 
