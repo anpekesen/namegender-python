@@ -6,6 +6,25 @@ from unittest.mock import patch
 from namegender import NameGender, NameGenderError
 
 
+ENVELOPE = {"credits_charged", "credits_remaining", "data_version", "request_id", "country_source"}
+
+SALUTATION_DE = {
+    "credits_charged": 1, "credits_remaining": 99, "data_version": "2026.10", "request_id": "req_1",
+    "country_source": None, "query": "Dr. Anna Müller", "language": "de", "form": "gendered", "reason": None,
+    "salutation": {"formal": "Sehr geehrte Frau Dr. Müller,", "informal": "Liebe Anna,", "neutral": "Guten Tag Dr. Anna Müller,"},
+    "parts": {"opening": "Sehr geehrte", "courtesy": "Frau", "academic": "Dr.", "name": "Müller"},
+    "gender": "female", "gender_source": "lookup", "probability": 99, "confidence": "high",
+    "first_name": "Anna", "last_name": "Müller", "name_type": "personal", "country": "DE",
+}
+
+SALUTATION_NEUTRAL = {
+    **SALUTATION_DE, "query": "Andrea Rossi", "form": "neutral", "reason": "below_min_probability",
+    "salutation": {"formal": "Guten Tag Andrea Rossi,", "informal": "Hallo Andrea,", "neutral": "Guten Tag Andrea Rossi,"},
+    "parts": {"opening": "Guten Tag", "courtesy": None, "academic": None, "name": "Andrea Rossi"},
+    "gender": "male", "probability": 62, "confidence": "low", "first_name": "Andrea", "last_name": "Rossi", "country": None,
+}
+
+
 class ClientTest(unittest.TestCase):
     @patch("namegender.client.urlopen")
     def test_name(self, urlopen):
@@ -94,6 +113,79 @@ class ClientTest(unittest.TestCase):
             NameGender("secret").account()
         self.assertEqual(caught.exception.status, 402)
         self.assertEqual(caught.exception.body["error"], "no_credits")
+
+    @patch("namegender.client.urlopen")
+    def test_salutation_sends_only_the_options_that_are_set(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = json.dumps(SALUTATION_DE).encode()
+        client = NameGender("secret")
+
+        result = client.salutation("Dr. Anna Müller", language="de", min_probability=80)
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://namegender.com/api/v1/salutation")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(json.loads(request.data), {"name": "Dr. Anna Müller", "language": "de", "min_probability": 80})
+        self.assertEqual(result["form"], "gendered")
+        self.assertIsNone(result["reason"])
+        self.assertEqual(result["salutation"], {
+            "formal": "Sehr geehrte Frau Dr. Müller,", "informal": "Liebe Anna,", "neutral": "Guten Tag Dr. Anna Müller,"})
+        self.assertEqual(result["parts"]["academic"], "Dr.")
+        self.assertEqual(result["credits_charged"], 1)
+
+        client.salutation(first_name="Andrea", last_name="Rossi", language="de", country="IT", locale="de-DE",
+                          ip="203.0.113.7", gender="neutral", min_probability=95, title="Dr.")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data), {
+            "first_name": "Andrea", "last_name": "Rossi", "language": "de", "country": "IT", "locale": "de-DE",
+            "ip": "203.0.113.7", "gender": "neutral", "min_probability": 95, "title": "Dr."})
+
+    @patch("namegender.client.urlopen")
+    def test_salutation_neutral_form_with_reason_and_null_parts(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = json.dumps(SALUTATION_NEUTRAL).encode()
+        result = NameGender("secret").salutation("Andrea Rossi", language="de")
+        self.assertEqual(result["form"], "neutral")
+        self.assertEqual(result["reason"], "below_min_probability")
+        self.assertEqual(result["salutation"]["formal"], "Guten Tag Andrea Rossi,")
+        self.assertIsNone(result["parts"]["courtesy"])
+        self.assertIsNone(result["parts"]["academic"])
+
+    @patch("namegender.client.urlopen")
+    def test_salutation_bulk_keeps_order_and_summary(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        organization = {**SALUTATION_NEUTRAL, "query": "ACME GmbH", "form": "organization", "reason": None,
+                        "gender": None, "name_type": "organization",
+                        "parts": {"opening": "Sehr geehrte Damen und Herren", "courtesy": None, "academic": None, "name": None}}
+        results = [{k: v for k, v in r.items() if k not in ENVELOPE} for r in (SALUTATION_DE, SALUTATION_NEUTRAL, organization)]
+        response.read.return_value = json.dumps({
+            "credits_charged": 3, "credits_remaining": 96, "data_version": "2026.10", "request_id": "req_2",
+            "took_ms": 4, "country_source": None, "language": "de",
+            "summary": {"total": 3, "gendered": 1, "neutral": 1, "organization": 1}, "results": results,
+        }).encode()
+        client = NameGender("secret")
+
+        result = client.salutation_bulk(("Dr. Anna Müller", "Andrea Rossi", "ACME GmbH"), language="de")
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://namegender.com/api/v1/salutation/bulk")
+        self.assertEqual(json.loads(request.data), {"names": ["Dr. Anna Müller", "Andrea Rossi", "ACME GmbH"], "language": "de"})
+        self.assertEqual(result["summary"], {"total": 3, "gendered": 1, "neutral": 1, "organization": 1})
+        self.assertEqual([r["query"] for r in result["results"]], ["Dr. Anna Müller", "Andrea Rossi", "ACME GmbH"])
+        self.assertEqual([r["form"] for r in result["results"]], ["gendered", "neutral", "organization"])
+        self.assertIsNone(result["results"][2]["parts"]["name"])
+
+        client.salutation_bulk("Dr. Anna Müller")
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data), {"names": ["Dr. Anna Müller"]})
+
+    @patch("namegender.client.urlopen")
+    def test_salutation_unsupported_language_raises(self, urlopen):
+        body = json.dumps({"error": "invalid_input", "message": "Unsupported language.", "request_id": "req_7",
+                           "field": "language", "supported": ["en", "de", "tr"]}).encode()
+        urlopen.side_effect = HTTPError("https://namegender.com/api/v1/salutation", 422, "Unprocessable", {}, io.BytesIO(body))
+        with self.assertRaises(NameGenderError) as caught:
+            NameGender("secret").salutation("Dr. Anna Müller", language="xx")
+        self.assertEqual(caught.exception.status, 422)
+        self.assertEqual(str(caught.exception), "Unsupported language.")
+        self.assertEqual(caught.exception.body["field"], "language")
+        self.assertEqual(caught.exception.body["supported"], ["en", "de", "tr"])
 
 
 class BatchesTest(unittest.TestCase):

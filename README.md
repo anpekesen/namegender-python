@@ -41,6 +41,38 @@ Success is the HTTP status: any non-2xx response raises `NameGenderError`
 with `status` and `body` (`{"error", "message", "request_id", "docs"}`).
 Branch on `body["error"]`, not on the message.
 
+## Salutation
+
+Returns a ready-to-use letter salutation for a name, with titles parsed out.
+
+```python
+result = client.salutation("Dr. Anna Müller", language="de")
+print(result["salutation"]["formal"])  # Sehr geehrte Frau Dr. Müller,
+
+result = client.salutation("Ahmet Yılmaz", language="tr")
+print(result["salutation"]["formal"])  # Sayın Ahmet Bey,
+
+# First and last name stored separately:
+result = client.salutation(first_name="Anna", last_name="Müller", title="Dr.", language="de")
+
+result = client.salutation_bulk(["Dr. Anna Müller", "ACME GmbH"], language="de")
+print(result["summary"])  # {"total": 2, "gendered": 1, "neutral": 0, "organization": 1}
+```
+
+Keyword arguments: `language` (en, en-US, en-GB, de, de-AT, de-CH, fr, es,
+it, pt, pt-PT, pt-BR, nl, tr, pl, ja; an unsupported one raises
+`NameGenderError` with status 422), `country`, `locale`, `ip`, `gender`
+(`"male"`, `"female"` or `"neutral"`), `min_probability` (50–100, default 90)
+and `title`. One credit per name; `salutation_bulk` takes up to 100 names and
+returns `results` in input order.
+
+`salutation` carries `formal`, `informal` and `neutral`, and `parts` the
+pieces (`opening`, `courtesy`, `academic`, `name`, each possibly `None`).
+When the gender is not certain you get the neutral form: `form` is
+`"gendered"`, `"neutral"` or `"organization"`, and `reason` says why it is
+not gendered (`"gender_unknown"`, `"below_min_probability"`, ...).
+`best_guess` does not apply to salutations.
+
 ## Country distribution
 
 Returns the countries a name is recorded in. This is not a country-of-origin or

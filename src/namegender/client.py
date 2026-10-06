@@ -60,6 +60,36 @@ class NameGender:
         return self._post("/gender/bulk", self._payload(
             names=list(names), country=country, type=type, locale=locale, ip=ip, **options))
 
+    def salutation(self, name=None, *, first_name=None, last_name=None, language=None, country=None,
+                   locale=None, ip=None, gender=None, min_probability=None, title=None):
+        """A ready-to-use letter salutation, e.g. ``"Sehr geehrte Frau Dr. Müller,"``.
+
+        Pass the full name (titles included), or ``first_name`` and
+        ``last_name`` when they are stored separately. ``language`` is one of
+        en, en-US, en-GB, de, de-AT, de-CH, fr, es, it, pt, pt-PT, pt-BR, nl,
+        tr, pl, ja (anything else raises NameGenderError with status 422).
+        ``gender`` ("male", "female" or "neutral") overrides the lookup,
+        ``min_probability`` (50-100, default 90) is the certainty needed for a
+        gendered form and ``title`` is an academic title such as ``"Dr."``.
+        When the gender is not certain the neutral form comes back; ``form``
+        and ``reason`` say why. ``best_guess`` does not apply. One credit.
+        """
+        return self._post("/salutation", self._payload(
+            name=name, first_name=first_name, last_name=last_name, language=language, country=country,
+            locale=locale, ip=ip, gender=gender, min_probability=min_probability, title=title))
+
+    def salutation_bulk(self, names, *, language=None, country=None, locale=None, ip=None, gender=None,
+                        min_probability=None, title=None):
+        """Salutations for up to 100 names, returned in input order. One credit per name.
+
+        The options, as for :meth:`salutation`, apply to every name.
+        """
+        if isinstance(names, str):
+            names = [names]
+        return self._post("/salutation/bulk", self._payload(
+            names=list(names), language=language, country=country, locale=locale, ip=ip, gender=gender,
+            min_probability=min_probability, title=title))
+
     def countries(self, name, limit=None):
         """Country distribution of a name. Not a country-of-origin or ethnicity inference.
 
