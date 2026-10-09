@@ -102,6 +102,34 @@ two possibly `None`).
 It never calls a name fake: use it to flag records for a second look, not to
 reject people automatically. Surnames are judged by their shape only.
 
+## Age from name
+
+How old the living people with a first name are: the median age, the middle
+half (`age_range`) and the middle 80% (`age_range_80`).
+
+```python
+result = client.age("Brittany")
+print(result["age"], result["age_range"])  # 36 {'low': 32, 'high': 38}
+print(result["country_source"])  # default: no hint, so the US series
+
+result = client.age("Kevin", country="FR")
+print(result["age"])  # 34 (47 in the US)
+
+result = client.age("Leslie", gender="male")  # 66; women called Leslie: 50
+
+result = client.age_bulk(["Jean", "Léa"], country="FR")  # up to 100
+```
+
+Keyword arguments: `gender`, `country`, `locale` and `ip`. Covered: the United
+States (SSA births 1880–2024), France (INSEE 1900–2025) and Norway (SSB
+1945–2025); without a hint the US series is used. When `age` is `None`,
+`reason` says why: `"country_not_covered"` costs no credit, `"not_found"` and
+`"insufficient_data"` cost one like any other name.
+
+It describes a group, not a person: for most names the middle half spans 10 to
+25 years. Use it for audience analysis and research, never to decide anything
+about one person.
+
 ## Country distribution
 
 Returns the countries a name is recorded in. This is not a country-of-origin or

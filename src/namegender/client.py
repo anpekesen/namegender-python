@@ -113,6 +113,29 @@ class NameGender:
         return self._post("/name-check/bulk", self._payload(
             names=list(names), country=country, locale=locale, ip=ip))
 
+    def age(self, name, *, gender=None, country=None, locale=None, ip=None):
+        """How old the living people with a first name are.
+
+        ``age`` is the median, ``age_range`` the middle half and ``age_range_80``
+        the middle 80% (each ``{"low", "high"}``). Covered: US, FR and NO;
+        without a hint the US series is used (``country_source`` "default").
+        ``gender`` ("male" or "female") uses one gender's records. When
+        ``age`` is None, ``reason`` says why; "country_not_covered" costs no
+        credit, anything else one. It describes a group, not a person: never
+        use it to decide anything about one person.
+        """
+        return self._post("/age", self._payload(name=name, gender=gender, country=country, locale=locale, ip=ip))
+
+    def age_bulk(self, names, *, gender=None, country=None, locale=None, ip=None):
+        """Age spreads for up to 100 names, returned in input order. One credit per name.
+
+        The options, as for :meth:`age`, apply to every name.
+        """
+        if isinstance(names, str):
+            names = [names]
+        return self._post("/age/bulk", self._payload(
+            names=list(names), gender=gender, country=country, locale=locale, ip=ip))
+
     def countries(self, name, limit=None):
         """Country distribution of a name. Not a country-of-origin or ethnicity inference.
 

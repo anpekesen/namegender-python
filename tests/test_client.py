@@ -51,6 +51,21 @@ NAME_CHECK_SUSPICIOUS = {
     "evidence": {"first_name_status": None, "first_name_counted_records": 0},
 }
 
+AGE_BRITTANY = {
+    "credits_charged": 1, "credits_remaining": 99, "request_id": "req_1",
+    "name": "Brittany", "first_name": "Brittany", "gender": None, "age": 36,
+    "age_range": {"low": 32, "high": 38}, "age_range_80": {"low": 28, "high": 41}, "birth_year": 1990,
+    "sample_size": 353775, "births": 361434, "country": "US", "country_source": "default",
+    "source": "ssa", "series": "1880-2024", "reference_year": 2026, "reason": None,
+}
+
+AGE_NOT_COVERED = {
+    **AGE_BRITTANY, "credits_charged": 0, "name": "Andrea", "first_name": "Andrea", "age": None,
+    "age_range": None, "age_range_80": None, "birth_year": None, "sample_size": 0, "births": 0,
+    "country": "DE", "country_source": "country", "source": None, "series": None, "reason": "country_not_covered",
+}
+
+
 class ClientTest(unittest.TestCase):
     @patch("namegender.client.urlopen")
     def test_name(self, urlopen):
@@ -212,6 +227,38 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(str(caught.exception), "Unsupported language.")
         self.assertEqual(caught.exception.body["field"], "language")
         self.assertEqual(caught.exception.body["supported"], ["en", "de", "tr"])
+
+    @patch("namegender.client.urlopen")
+    def test_age_sends_only_the_options_that_are_set(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = json.dumps(AGE_BRITTANY).encode()
+        client = NameGender("secret")
+
+        result = client.age("Brittany", gender=None, locale="en-US")
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://namegender.com/api/v1/age")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(json.loads(request.data), {"name": "Brittany", "locale": "en-US"})
+        self.assertEqual(result["age"], 36)
+        self.assertEqual(result["age_range"], {"low": 32, "high": 38})
+        self.assertEqual(result["country_source"], "default")
+
+    @patch("namegender.client.urlopen")
+    def test_age_bulk_takes_a_single_string_and_keeps_the_reason(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = json.dumps({
+            "credits_charged": 0, "credits_remaining": 99, "request_id": "req_2",
+            "country_source": "country", "results": [AGE_NOT_COVERED],
+        }).encode()
+        client = NameGender("secret")
+
+        result = client.age_bulk("Andrea", country="DE", gender="female")
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://namegender.com/api/v1/age/bulk")
+        self.assertEqual(json.loads(request.data), {"names": ["Andrea"], "gender": "female", "country": "DE"})
+        self.assertEqual(result["credits_charged"], 0)
+        self.assertIsNone(result["results"][0]["age"])
+        self.assertEqual(result["results"][0]["reason"], "country_not_covered")
 
     @patch("namegender.client.urlopen")
     def test_name_check_sends_only_the_options_that_are_set(self, urlopen):
